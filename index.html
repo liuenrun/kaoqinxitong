@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>智能班级考勤系统</title>
+    <script src="https://fastly.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://fastly.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <link rel="stylesheet" href="https://fastly.jsdelivr.net/npm/vant@4/lib/index.css" />
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #f7f8fa; font-family: system-ui, -apple-system, sans-serif; padding-bottom: 60px; }
+        #app { max-width: 480px; margin: 0 auto; background: #fff; min-height: 100vh; }
+        .header { background: linear-gradient(135deg, #1989fa, #07c160); color: white; padding: 20px 16px; border-radius: 0 0 24px 24px; }
+        .header h1 { font-size: 22px; font-weight: 600; }
+        .role-tag { display: inline-block; background: rgba(255,255,255,0.25); padding: 2px 12px; border-radius: 12px; font-size: 12px; margin-top: 8px; }
+        .card { background: white; margin: 16px; border-radius: 16px; padding: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+        .card-title { font-weight: 600; font-size: 16px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+        .btn { background: #1989fa; color: white; border: none; padding: 6px 16px; border-radius: 20px; font-size: 14px; font-weight: 500; cursor: pointer; transition: 0.2s; }
+        .btn:active { transform: scale(0.95); }
+        .btn-success { background: #07c160; }
+        .btn-danger { background: #ee0a24; }
+        .btn-warning { background: #ff9800; }
+        .btn-disabled { background: #ccc; cursor: not-allowed; }
+        .btn-sm { padding: 4px 12px; font-size: 12px; }
+        .course-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #f0f0f0; }
+        .course-item:last-child { border-bottom: none; }
+        .course-info { flex: 1; }
+        .course-info .name { font-weight: 500; }
+        .course-info .meta { font-size: 12px; color: #999; }
+        .badge { padding: 4px 12px; border-radius: 12px; font-size: 12px; }
+        .badge-green { background: #e1f3e1; color: #07c160; }
+        .badge-orange { background: #fff3e0; color: #ff9800; }
+        .badge-red { background: #fde8e8; color: #ee0a24; }
+        .tab-bar { display: flex; background: white; border-top: 1px solid #e8e8e8; position: fixed; bottom: 0; max-width: 480px; width: 100%; z-index: 999; }
+        .tab-item { flex: 1; text-align: center; padding: 8px 0; font-size: 12px; color: #999; cursor: pointer; }
+        .tab-item.active { color: #1989fa; font-weight: 500; }
+        .modal-mask { position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.5); z-index:1000; display:flex; align-items:center; justify-content:center; }
+        .modal-box { background: white; width: 90%; max-width: 400px; border-radius: 20px; padding: 24px; animation: fadeUp 0.3s; }
+        @keyframes fadeUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+        .input-group { margin-bottom: 16px; }
+        .input-group label { font-size: 14px; color: #666; display: block; margin-bottom: 4px; }
+        .input-group input, .input-group select { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; }
+        .geo-hint { background: #f0f9ff; padding: 8px 12px; border-radius: 8px; font-size: 13px; color: #1989fa; margin-bottom: 12px; }
+        .table-wrap { overflow-x: auto; margin-top: 8px; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th { background: #f0f2f5; padding: 10px 6px; text-align: left; }
+        td { padding: 10px 6px; border-bottom: 1px solid #eee; }
+        .text-center { text-align: center; }
+        .text-success { color: #07c160; }
+        .text-warning { color: #ff9800; }
+        .text-danger { color: #ee0a24; }
+        .close-btn { cursor: pointer; color: #999; font-size: 14px; }
+        .status-text { font-size: 13px; }
+    </style>
+</head>
+<body>
+<div id="app">
+    <!-- 头部 -->
+    <div class="header">
+        <h1>📚 智能考勤</h1>
+        <p>{{ currentUser ? '欢迎，' + currentUser.name : '请登录' }}</p>
+        <div class="role-tag">{{ currentUser ? currentUser.role : '游客' }}</div>
+    </div>
+
+    <!-- 登录页 -->
+    <div v-if="page === 'login'" style="padding:40px 24px;margin-top:20px;">
+        <div style="text-align:center;margin-bottom:32px;">
+            <h2 style="font-size:28px;">👋 登录</h2>
+            <p style="color:#999;">智能班级考勤管理系统</p>
+        </div>
+        <div class="card">
+            <div class="input-group">
+                <label>账号</label>
+                <input v-model="loginForm.username" placeholder="teacher1 / student1 / admin" />
+            </div>
+            <div class="input-group">
+                <label>密码</label>
+                <input v-model="loginForm.password" type="password" placeholder="123456" />
+            </div>
+            <button class="btn" style="width:100%;padding:12px;" @click="handleLogin">登录</button>
+            <div style="text-align:center;font-size:12px;color:#ccc;margin-top:12px;">教师:teacher1 学生:student1 密码:123456</div>
+        </div>
+    </div>
+
+    <!-- 首页 -->
+    <div v-else-if="page === 'home'" style="padding:16px;">
+        <div class="card">
+            <div class="card-title">
+                <span>📖 我的课程</span>
+                <span style="font-size:13px;color:#999;">{{ courses.length }}门</span>
+            </div>
+            <div v-for="c in courses" :key="c.course_id" class="course-item">
+                <div class="course-info">
+                    <div class="name">{{ c.course_name }}</div>
+                    <div class="meta">{{ c.schedule }} | {{ c.location }}</div>
+                </div>
+                <!-- 学生签到按钮（点击即签） -->
+                <div v-if="currentUser && currentUser.role === 'student'">
+                    <span v-if="c.signed" class="badge badge-green">已签到</span>
+                    <button v-else class="btn btn-success btn-sm" @click="handleSignIn(c.course_id)">签到</button>
+                </div>
+                <!-- 教师显示 -->
+                <span v-else-if="currentUser && currentUser.role === 'teacher'" style="font-size:12px;color:#999;">授课</span>
+            </div>
+            <!-- 教师发起签到 -->
+            <button v-if="currentUser && currentUser.role === 'teacher'" class="btn btn-success" style="width:100%;margin-top:12px;padding:12px;" @click="openModal('start')">
+                ➕ 发起签到
+            </button>
+        </div>
+
+        <div v-if="currentUser && currentUser.role === 'student'" class="card">
+            <div class="card-title">📍 定位签到</div>
+            <div class="geo-hint">签到将自动使用您当前的位置进行校验</div>
+            <button class="btn btn-warning" style="width:100%;" @click="getLocation">📡 获取当前位置</button>
+            <div style="font-size:12px;color:#999;margin-top:8px;">当前位置：{{ checkinForm.lat }}, {{ checkinForm.lng }}</div>
+        </div>
+
+        <div class="card" style="background:#f0f9ff;border:1px dashed #1989fa;">
+            <div style="font-size:14px;color:#1989fa;">💡 支持事务防重、地理围栏、明细统计</div>
+        </div>
+    </div>
+
+    <!-- 统计页 -->
+    <div v-else-if="page === 'stats'" style="padding:16px;">
+        <div class="card">
+            <div class="card-title">📊 考勤统计</div>
+            <div v-if="stats" style="text-align:center;">
+                <div style="font-size:48px;font-weight:700;color:#1989fa;">{{ stats.rate }}%</div>
+                <div style="color:#999;margin-bottom:16px;">课程：{{ stats.courseName }} 总出勤率</div>
+                <div style="display:flex;justify-content:space-around;padding:12px 0;">
+                    <div><span class="badge badge-green">正常</span> <strong>{{ stats.totalPresent }}</strong></div>
+                    <div><span class="badge badge-orange">迟到</span> <strong>{{ stats.totalLate }}</strong></div>
+                    <div><span class="badge badge-red">缺勤</span> <strong>{{ stats.totalAbsent }}</strong></div>
+                </div>
+                <div style="font-size:12px;color:#999;">总人次：{{ stats.totalStudents * stats.sessionsCount }} | 已签：{{ stats.totalPresent + stats.totalLate }}</div>
+            </div>
+            <button class="btn btn-success" style="width:100%;margin-top:16px;padding:12px;" @click="loadStudentDetails(courses[0]?.course_id)">
+                📋 查看学生明细
+            </button>
+        </div>
+
+        <!-- 学生明细表格 -->
+        <div v-if="showDetails" class="card">
+            <div class="card-title">
+                <span>👨‍🎓 学生考勤明细</span>
+                <span class="close-btn" @click="showDetails = false">✕ 关闭</span>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>学号</th>
+                            <th>姓名</th>
+                            <th class="text-center">出勤</th>
+                            <th class="text-center">迟到</th>
+                            <th class="text-center">缺勤</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="stu in studentDetails" :key="stu.student_id">
+                            <td>{{ stu.student_id }}</td>
+                            <td>{{ stu.student_name }}</td>
+                            <td class="text-center text-success">{{ stu.present_count }}</td>
+                            <td class="text-center text-warning">{{ stu.late_count }}</td>
+                            <td class="text-center text-danger">{{ stu.absent_count }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div v-if="studentDetails.length === 0" style="text-align:center;color:#999;padding:16px;">
+                暂无学生数据
+            </div>
+        </div>
+    </div>
+
+    <!-- 个人页 -->
+    <div v-else-if="page === 'profile'" style="padding:16px;">
+        <div class="card">
+            <div style="display:flex;align-items:center;gap:16px;">
+                <div style="width:60px;height:60px;background:#1989fa;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-size:24px;font-weight:bold;">
+                    {{ currentUser ? currentUser.name.charAt(0) : 'U' }}
+                </div>
+                <div>
+                    <div style="font-weight:600;font-size:18px;">{{ currentUser ? currentUser.name : '' }}</div>
+                    <div style="font-size:13px;color:#999;">角色：{{ currentUser ? currentUser.role : '' }}</div>
+                </div>
+            </div>
+        </div>
+        <button class="btn btn-danger" style="width:100%;padding:12px;" @click="handleLogout">退出登录</button>
+    </div>
+
+    <!-- 底部 Tab -->
+    <div class="tab-bar" v-if="currentUser">
+        <div class="tab-item" :class="{ active: activeTab === 'home' }" @click="switchTab('home')">🏠<br />首页</div>
+        <div class="tab-item" :class="{ active: activeTab === 'stats' }" @click="switchTab('stats')">📊<br />统计</div>
+        <div class="tab-item" :class="{ active: activeTab === 'profile' }" @click="switchTab('profile')">👤<br />我的</div>
+    </div>
+
+    <!-- 教师发起签到模态框（学生已不再使用） -->
+    <div v-if="showModal" class="modal-mask" @click.self="showModal = false">
+        <div class="modal-box">
+            <h3 style="margin-bottom:16px;">🚀 发起签到</h3>
+            <div class="input-group">
+                <label>选择课程</label>
+                <select v-model="sessionForm.course_id">
+                    <option v-for="c in courses" :key="c.course_id" :value="c.course_id">{{ c.course_name }}</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label>签到时长（分钟）</label>
+                <input v-model.number="sessionForm.duration" type="number" />
+            </div>
+            <div class="geo-hint">📍 位置（模拟）纬度:{{ sessionForm.lat }}, 经度:{{ sessionForm.lng }}</div>
+            <button class="btn btn-success" style="width:100%;padding:12px;" @click="handleStartSession">立即发起</button>
+            <button class="btn" style="width:100%;background:#ddd;color:#333;margin-top:8px;padding:12px;" @click="showModal = false">取消</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const { createApp, ref, reactive, computed, onMounted } = Vue;
+
+    // ==================== 配置 ====================
+    const USE_REAL_BACKEND = true;
+    const API_BASE = 'http://localhost:3000';
+
+    // ==================== 真实后端 API ====================
+    const RealAPI = {
+        async login(username, password) {
+            const res = await axios.post(`${API_BASE}/api/login`, { username, password });
+            if (res.data.success) sessionStorage.setItem('user', JSON.stringify(res.data.user));
+            return res.data;
+        },
+        getCurrentUser() {
+            const user = sessionStorage.getItem('user');
+            return user ? JSON.parse(user) : null;
+        },
+        logout() {
+            sessionStorage.removeItem('user');
+            return { success: true };
+        },
+        async getTeacherCourses(teacherId) {
+            const res = await axios.get(`${API_BASE}/api/teacher/${teacherId}/courses`);
+            return res.data;
+        },
+        async getStudentCourses(studentId) {
+            const res = await axios.get(`${API_BASE}/api/student/${studentId}/courses`);
+            return res.data;
+        },
+        async startSession(course_id, duration_minutes, lat, lng) {
+            const res = await axios.post(`${API_BASE}/api/session`, { course_id, duration_minutes, lat, lng });
+            return res.data;
+        },
+        async checkIn(student_id, session_id, lat, lng) {
+            const res = await axios.post(`${API_BASE}/api/checkin`, { student_id, session_id, lat, lng });
+            return res.data;
+        },
+        async getStats(courseId) {
+            const res = await axios.get(`${API_BASE}/api/stats/${courseId}`);
+            return res.data;
+        },
+        async getStudentAttendance(courseId) {
+            const res = await axios.get(`${API_BASE}/api/course/${courseId}/students/attendance`);
+            return res.data;
+        },
+        // 获取课程当前进行中的签到会话
+        async getActiveSession(courseId) {
+            const res = await axios.get(`${API_BASE}/api/course/${courseId}/active-session`);
+            return res.data;
+        }
+    };
+
+    const API = RealAPI;
+
+    // ==================== Vue 应用 ====================
+    const app = createApp({
+        setup() {
+            const currentUser = ref(API.getCurrentUser());
+            const page = ref(currentUser.value ? 'home' : 'login');
+            const activeTab = ref('home');
+            const courses = ref([]);
+            const stats = ref(null);
+            const showModal = ref(false);
+            const modalType = ref('');
+
+            const studentDetails = ref([]);
+            const showDetails = ref(false);
+
+            const loginForm = reactive({ username: '', password: '' });
+            const sessionForm = reactive({ course_id: 101, duration: 15, lat: 37.5, lng: 122.1 });
+            const checkinForm = reactive({ session_id: 1001, lat: 37.5, lng: 122.1 });
+
+            const loadCourses = async () => {
+                if (!currentUser.value) return;
+                let data;
+                if (currentUser.value.role === 'teacher') {
+                    data = await API.getTeacherCourses(currentUser.value.user_id);
+                } else if (currentUser.value.role === 'student') {
+                    data = await API.getStudentCourses(currentUser.value.user_id);
+                }
+                // 为每个课程添加 signed 标记（初始 false）
+                courses.value = (data || []).map(c => ({ ...c, signed: false }));
+                if (courses.value.length) {
+                    stats.value = await API.getStats(courses.value[0].course_id);
+                }
+            };
+
+            const handleLogin = async () => {
+                const res = await API.login(loginForm.username, loginForm.password);
+                if (res.success) {
+                    currentUser.value = res.user;
+                    page.value = 'home';
+                    await loadCourses();
+                    activeTab.value = 'home';
+                } else {
+                    alert(res.msg);
+                }
+            };
+
+            const handleLogout = () => {
+                API.logout();
+                currentUser.value = null;
+                page.value = 'login';
+                courses.value = [];
+                stats.value = null;
+                studentDetails.value = [];
+                showDetails.value = false;
+            };
+
+            const switchTab = (tab) => {
+                activeTab.value = tab;
+                if (tab === 'home') page.value = 'home';
+                else if (tab === 'stats') {
+                    page.value = 'stats';
+                    if (courses.value.length) {
+                        API.getStats(courses.value[0].course_id).then(d => stats.value = d);
+                    }
+                    showDetails.value = false;
+                } else if (tab === 'profile') page.value = 'profile';
+            };
+
+            const openModal = (type) => {
+                modalType.value = type;
+                showModal.value = true;
+            };
+
+            const handleStartSession = async () => {
+                const res = await API.startSession(
+                    sessionForm.course_id,
+                    sessionForm.duration,
+                    sessionForm.lat,
+                    sessionForm.lng
+                );
+                if (res.success) {
+                    alert(`签到已发起！会话ID: ${res.session_id}，签到码: ${res.token}`);
+                    showModal.value = false;
+                    await loadCourses();
+                } else {
+                    alert(res.msg);
+                }
+            };
+
+            // 学生签到（点击即签）
+            const handleSignIn = async (courseId) => {
+                if (!currentUser.value) return;
+                // 1. 获取该课程当前进行中的会话
+                const result = await API.getActiveSession(courseId);
+                if (!result.active) {
+                    alert('当前课程没有进行中的签到，请等待教师发起。');
+                    return;
+                }
+                const session = result.session;
+                // 2. 签到
+                const res = await API.checkIn(
+                    currentUser.value.user_id,
+                    session.session_id,
+                    checkinForm.lat,
+                    checkinForm.lng
+                );
+                if (res.success) {
+                    alert(`签到成功！状态：${res.status === 'present' ? '正常' : '迟到'}`);
+                    // 标记该课程已签到（更新视图）
+                    const course = courses.value.find(c => c.course_id === courseId);
+                    if (course) course.signed = true;
+                    // 刷新统计（如果当前统计显示该课程）
+                    if (stats.value && courses.value.length && courses.value[0].course_id === courseId) {
+                        stats.value = await API.getStats(courseId);
+                    }
+                } else {
+                    alert(res.msg);
+                }
+            };
+
+            const getLocation = () => {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        pos => {
+                            checkinForm.lat = pos.coords.latitude;
+                            checkinForm.lng = pos.coords.longitude;
+                            alert('已获取实时位置');
+                        },
+                        () => alert('无法获取位置，使用模拟坐标')
+                    );
+                } else {
+                    alert('浏览器不支持定位');
+                }
+            };
+
+            const loadStudentDetails = async (courseId) => {
+                if (!courseId) {
+                    alert('请先选择一门课程');
+                    return;
+                }
+                try {
+                    const data = await API.getStudentAttendance(courseId);
+                    studentDetails.value = data;
+                    showDetails.value = true;
+                } catch (e) {
+                    alert('获取学生明细失败，请确保后端已添加相应接口');
+                    console.error(e);
+                }
+            };
+
+            onMounted(() => {
+                if (currentUser.value) loadCourses();
+            });
+
+            return {
+                currentUser,
+                page,
+                activeTab,
+                courses,
+                stats,
+                showModal,
+                modalType,
+                loginForm,
+                sessionForm,
+                checkinForm,
+                studentDetails,
+                showDetails,
+                handleLogin,
+                handleLogout,
+                switchTab,
+                openModal,
+                handleStartSession,
+                handleSignIn,
+                getLocation,
+                loadCourses,
+                loadStudentDetails,
+            };
+        }
+    });
+
+    app.mount('#app');
+</script>
+</body>
+</html>
